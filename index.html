@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Лабиринт Смерти</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
+        #menu { position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; background: #000; color: #f00; text-align: center; }
+        h1 { font-size: 80px; text-transform: uppercase; letter-spacing: 15px; margin-bottom: 50px; text-shadow: 0 0 20px #f00; }
+        button { padding: 20px 60px; font-size: 30px; background: transparent; border: 3px solid #f00; color: #f00; cursor: pointer; transition: 0.3s; text-transform: uppercase; font-weight: bold; }
+        button:hover { background: #f00; color: #000; box-shadow: 0 0 30px #f00; }
+        #hud { position: absolute; bottom: 20px; left: 20px; color: #fff; z-index: 5; display: none; pointer-events: none; font-size: 20px; }
+        canvas { display: block; }
+        #msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 24px; text-align: center; pointer-events: none; z-index: 6; display: none; background: rgba(0,0,0,0.5); padding: 10px; }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <h1>Лабиринт Смерти</h1>
+        <button onclick="startGame()">Играть</button>
+    </div>
+    <div id="hud">
+        Ключ: <span id="hasKey">НЕТ</span><br>
+        <span id="hint" style="font-size: 14px; color: #aaa;">Правая кнопка мыши - Обзор | WASD - Движение</span>
+    </div>
+    <div id="msg">Нажмите 'E', чтобы поднять ключ</div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+
+    <script>
+        const mazeData = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,2,1],
+            [1,0,1,0,1,1,1,1,1,1,1,1,0,1,1,1,1,0,1,0,1,1,1,1,1,0,1],
+            [1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,0,1],
+            [1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,0,1,0,1,1,1,1,1],
+            [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,1],
+            [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,0,1],
+            [1,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0,1],
+            [1,0,1,1,1,1,0,1,0,1,1,1,1,1,1,0,1,0,1,1,1,1,1,0,1,0,1],
+            [1,0,0,0,0,1,0,1,0,1,0,0,0,0,1,0,1,0,0,0,0,0,1,0,1,0,1],
+            [1,1,1,1,0,1,0,1,0,1,0,1,1,0,1,0,1,1,1,1,1,0,1,0,1,0,1],
+            [1,0,0,0,0,1,0,1,0,0,0,1,3,0,1,0,0,0,0,0,1,0,1,0,0,0,1],
+            [1,0,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1],
+            [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,1],
+            [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,0,1],
+            [1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,1,0,1],
+            [1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,0,1],
+            [1,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
+            [1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+            [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],
+            [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1],
+            [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1],
+            [1,4,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        let scene, camera, renderer, monster, key, chain, door;
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let canMove = false, isRightMouseDown = false;
+        let hasKey = false, gameOver = false;
+        let velocity = new THREE.Vector3();
+        let direction = new THREE.Vector3();
+        const wallSize = 4;
+        const clock = new THREE.Clock();
+        let lastBlackout = 0;
+        let isBlackout = false;
+        const walls = [];
+
+        function startGame() {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('hud').style.display = 'block';
+            init();
+            animate();
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000);
+            scene.fog = new THREE.FogExp2(0x000000, 0.1);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.2);
+            scene.add(ambientLight);
+
+            const flashLight = new THREE.SpotLight(0xffffff, 10, 30, Math.PI / 4, 0.5, 1);
+            flashLight.castShadow = true;
+            camera.add(flashLight);
+            flashLight.position.set(0, 0, 1);
+            flashLight.target = new THREE.Object3D();
+            camera.add(flashLight.target);
+            flashLight.target.position.set(0, 0, -1);
+            scene.add(camera);
+
+            const floorGeo = new THREE.PlaneGeometry(200, 200);
+            const floorMat = new THREE.MeshPhongMaterial({ color: 0xd2b48c });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            const ceilGeo = new THREE.PlaneGeometry(200, 200);
+            const ceilMat = new THREE.MeshPhongMaterial({ color: 0x5d4037 });
+            const ceil = new THREE.Mesh(ceilGeo, ceilMat);
+            ceil.rotation.x = Math.PI / 2;
+            ceil.position.y = wallSize;
+            scene.add(ceil);
+
+            const wallGeo = new THREE.BoxGeometry(wallSize, wallSize, wallSize);
+            const wallMat = new THREE.MeshPhongMaterial({ color: 0x808080 });
+
+            for (let z = 0; z < mazeData.length; z++) {
+                for (let x = 0; x < mazeData[z].length; x++) {
+                    let posX = (x - mazeData[z].length / 2) * wallSize;
+                    let posZ = (z - mazeData.length / 2) * wallSize;
+
+                    if (mazeData[z][x] === 1) {
+                        const wall = new THREE.Mesh(wallGeo, wallMat);
+                        wall.position.set(posX, wallSize / 2, posZ);
+                        wall.castShadow = true;
+                        wall.receiveShadow = true;
+                        scene.add(wall);
+                        walls.push(wall);
+                    } else if (mazeData[z][x] === 4) {
+                        camera.position.set(posX, 1.6, posZ);
+                    } else if (mazeData[z][x] === 3) {
+                        createMonster(posX, posZ);
+                    } else if (mazeData[z][x] === 2) {
+                        createKey(posX, posZ, x, z);
+                    }
+                }
+            }
+
+            createDoor();
+
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('mousedown', (e) => { if (e.button === 2) isRightMouseDown = true; });
+            document.addEventListener('mouseup', (e) => { if (e.button === 2) isRightMouseDown = false; });
+            document.addEventListener('contextmenu', e => e.preventDefault());
+            document.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('resize', onWindowResize);
+            
+            canMove = true;
+            lastBlackout = Date.now();
+        }
+
+        function createMonster(x, z) {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshPhongMaterial({color: 0x111111}));
+            body.position.y = 0.5;
+            group.add(body);
+            for(let i=0; i<8; i++){
+                const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2), new THREE.MeshPhongMaterial({color: 0x000000}));
+                leg.rotation.z = Math.PI/3;
+                leg.rotation.y = (i * Math.PI/4);
+                group.add(leg);
+            }
+            monster = group;
+            monster.position.set(x, 0.5, z);
+            scene.add(monster);
+        }
+
+        function createKey(x, z, gridX, gridZ) {
+            const keyGeo = new THREE.BoxGeometry(0.2, 0.5, 0.1);
+            const keyMat = new THREE.MeshPhongMaterial({ color: 0x000000 });
+            key = new THREE.Mesh(keyGeo, keyMat);
+            
+            const chainGeo = new THREE.CylinderGeometry(0.01, 0.01, 1);
+            const chainMat = new THREE.MeshPhongMaterial({ color: 0xffd700 });
+            chain = new THREE.Mesh(chainGeo, chainMat);
+            
+            key.position.set(x, 2, z);
+            chain.position.set(x, 2.5, z);
+            scene.add(key);
+            scene.add(chain);
+        }
+
+        function createDoor() {
+            const doorGeo = new THREE.BoxGeometry(wallSize, wallSize, 0.5);
+            const doorMat = new THREE.MeshPhongMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 2 });
+            door = new THREE.Mesh(doorGeo, doorMat);
+            door.position.set((25 - mazeData[0].length / 2) * wallSize, wallSize / 2, (1 - mazeData.length / 2) * wallSize);
+            scene.add(door);
+            
+            const doorLight = new THREE.PointLight(0x00ff00, 5, 10);
+            doorLight.position.copy(door.position);
+            scene.add(doorLight);
+        }
+
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'KeyW': moveForward = true; break;
+                case 'KeyA': moveLeft = true; break;
+                case 'KeyS': moveBackward = true; break;
+                case 'KeyD': moveRight = true; break;
+                case 'KeyE': checkKeyPickup(); break;
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW': moveForward = false; break;
+                case 'KeyA': moveLeft = false; break;
+                case 'KeyS': moveBackward = false; break;
+                case 'KeyD': moveRight = false; break;
+            }
+        }
+
+        function onMouseMove(event) {
+            if (isRightMouseDown && canMove) {
+                camera.rotation.y -= event.movementX * 0.002;
+            }
+        }
+
+        function checkKeyPickup() {
+            if (!key) return;
+            const dist = camera.position.distanceTo(key.position);
+            if (dist < 3) {
+                hasKey = true;
+                scene.remove(key);
+                scene.remove(chain);
+                document.getElementById('hasKey').innerText = "ЕСТЬ";
+                document.getElementById('hasKey').style.color = "#0f0";
+                document.getElementById('msg').style.display = 'none';
+            }
+        }
+
+        function updateMonster() {
+            if (!monster || gameOver) return;
+            const dir = new THREE.Vector3().subVectors(camera.position, monster.position).normalize();
+            monster.position.add(dir.multiplyScalar(0.03));
+            monster.lookAt(camera.position);
+            if (monster.position.distanceTo(camera.position) < 1.5) {
+                die();
+            }
+        }
+
+        function die() {
+            gameOver = true;
+            alert("МОНСТР ПОЙМАЛ ВАС!");
+            location.reload();
+        }
+
+        function win() {
+            gameOver = true;
+            alert("ВЫ СБЕЖАЛИ ИЗ ЛАБИРИНТА!");
+            location.reload();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            if (gameOver) return;
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            const now = Date.now();
+
+            if (now - lastBlackout > 60000) {
+                isBlackout = true;
+                if (now - lastBlackout > 63000) {
+                    isBlackout = false;
+                    lastBlackout = now;
+                }
+            }
+
+            scene.children.forEach(c => {
+                if (c instanceof THREE.SpotLight || c instanceof THREE.PointLight || c instanceof THREE.AmbientLight) {
+                    c.visible = !isBlackout;
+                }
+            });
+
+            if (canMove) {
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+
+                direction.z = Number(moveForward) - Number(moveBackward);
+                direction.x = Number(moveRight) - Number(moveLeft);
+                direction.normalize();
+
+                if (moveForward || moveBackward) velocity.z -= direction.z * 100.0 * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * 100.0 * delta;
+
+                const oldPos = camera.position.clone();
+                camera.translateX(-velocity.x * delta);
+                camera.translateZ(velocity.z * delta);
+                camera.position.y = 1.6;
+
+                for (let wall of walls) {
+                    if (new THREE.Box3().setFromObject(wall).expandByScalar(0.5).containsPoint(camera.position)) {
+                        camera.position.copy(oldPos);
+                    }
+                }
+            }
+
+            if (key) {
+                if (camera.position.distanceTo(key.position) < 3 && !hasKey) {
+                    document.getElementById('msg').style.display = 'block';
+                } else {
+                    document.getElementById('msg').style.display = 'none';
+                }
+            }
+
+            if (hasKey && camera.position.distanceTo(door.position) < 3) {
+                win();
+            }
+
+            updateMonster();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
