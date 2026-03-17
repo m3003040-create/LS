@@ -3,28 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Лабиринт Смерти</title>
+    <title>Больница Смерти: Палата №6</title>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
-        #menu { position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; background: #000; color: #f00; text-align: center; }
-        h1 { font-size: 80px; text-transform: uppercase; letter-spacing: 15px; margin-bottom: 50px; text-shadow: 0 0 20px #f00; }
-        button { padding: 20px 60px; font-size: 30px; background: transparent; border: 3px solid #f00; color: #f00; cursor: pointer; transition: 0.3s; text-transform: uppercase; font-weight: bold; }
-        button:hover { background: #f00; color: #000; box-shadow: 0 0 30px #f00; }
-        #hud { position: absolute; bottom: 20px; left: 20px; color: #fff; z-index: 5; display: none; pointer-events: none; font-size: 20px; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #050505; font-family: 'Courier New', Courier, monospace; user-select: none; }
+        
+        /* Стили Меню */
+        #menu { position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 20; background: radial-gradient(circle at center, #222 0%, #000 100%); color: #eee; text-align: center; }
+        #menu::after { content: ""; position: absolute; width: 100%; height: 100%; background: url('textures/noise.png'); opacity: 0.03; pointer-events: none; }
+        h1 { font-size: 70px; text-transform: uppercase; letter-spacing: 10px; margin-bottom: 30px; color: #fff; text-shadow: 0 0 20px #fff, 2px 2px 2px #000; animation: flickerH1 5s infinite; }
+        @keyframes flickerH1 { 0%, 18%, 22%, 25%, 53%, 57%, 100% { opacity: 1; } 19%, 24%, 55% { opacity: 0; } }
+        button { padding: 15px 50px; font-size: 24px; background: transparent; border: 2px solid #fff; color: #fff; cursor: pointer; transition: 0.3s; text-transform: uppercase; box-shadow: 0 0 10px rgba(255,255,255,0.3); }
+        button:hover { background: #fff; color: #000; box-shadow: 0 0 30px #fff; }
+
+        /* Игровой интерфейс */
+        #hud { position: absolute; bottom: 20px; left: 20px; color: #fff; z-index: 10; display: none; pointer-events: none; font-size: 18px; text-shadow: 1px 1px 1px #000; }
+        #msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 22px; text-align: center; pointer-events: none; z-index: 11; display: none; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 5px; border: 1px solid #444; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: rgba(255,255,255,0.5); border-radius: 50%; transform: translate(-50%, -50%); z-index: 5; }
         canvas { display: block; }
-        #msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 24px; text-align: center; pointer-events: none; z-index: 6; display: none; background: rgba(0,0,0,0.5); padding: 10px; }
     </style>
 </head>
 <body>
+
     <div id="menu">
-        <h1>Лабиринт Смерти</h1>
-        <button onclick="startGame()">Играть</button>
+        <h1>Больница<br>Смерти</h1>
+        <button onclick="startGame()">Начать смену</button>
     </div>
+
     <div id="hud">
-        Ключ: <span id="hasKey">НЕТ</span><br>
-        <span id="hint" style="font-size: 14px; color: #aaa;">Правая кнопка мыши - Обзор | WASD - Движение</span>
+        Ключ: <span id="hasKey" style="color: #ff4444;">НЕТ</span>
     </div>
-    <div id="msg">Нажмите 'E', чтобы поднять ключ</div>
+    <div id="crosshair"></div>
+    <div id="msg">Нажмите 'E', чтобы взять объект</div>
 
     <script type="importmap">
     {
@@ -39,122 +48,150 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+        // ==========================================
+        // КАРТА (УМЕНЬШЕННАЯ И УПРОЩЕННАЯ)
+        // ==========================================
+        // 1-Стена, 0-Пол, 2-Ключ, 3-Монстр, 4-Старт, 5-Дверь
         const mazeData = [
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,2,1],
-            [1,0,1,0,1,1,1,1,1,1,1,1,0,1,1,1,1,0,1,0,1,1,1,1,1,0,1],
-            [1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,0,1],
-            [1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,0,1,0,1,1,1,1,1],
-            [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,1],
-            [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,0,1],
-            [1,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0,1],
-            [1,0,1,1,1,1,0,1,0,1,1,1,1,1,1,0,1,0,1,1,1,1,1,0,1,0,1],
-            [1,0,0,0,0,1,0,1,0,1,0,0,0,0,1,0,1,0,0,0,0,0,1,0,1,0,1],
-            [1,1,1,1,0,1,0,1,0,1,0,1,1,0,1,0,1,1,1,1,1,0,1,0,1,0,1],
-            [1,0,0,0,0,1,0,1,0,0,0,1,3,0,1,0,0,0,0,0,1,0,1,0,0,0,1],
-            [1,0,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1],
-            [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,1],
-            [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,0,1],
-            [1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,1,0,1],
-            [1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,0,1],
-            [1,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
-            [1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
-            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
-            [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],
-            [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1],
-            [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1],
-            [1,4,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,4,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,2,1],
+            [1,1,1,1,0,1,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1],
+            [1,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,1,0,1],
+            [1,0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,0,1],
+            [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,1],
+            [1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,0,1],
+            [1,0,0,0,0,0,0,1,0,0,0,1,3,0,1,0,1,0,0,0,1],
+            [1,0,1,1,1,1,0,1,1,1,0,1,1,0,1,0,1,0,1,1,1],
+            [1,0,1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,1],
+            [1,0,1,0,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,0,1],
+            [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+            [1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],
+            [1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+            [1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,0,1],
+            [1,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1,0,1],
+            [1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
+            [1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
         ];
 
-        let scene, camera, renderer, monster, key, chain, door;
+        let scene, camera, renderer, clock, monster, mixer;
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        let canMove = false, isRightMouseDown = false;
-        let hasKey = false, gameOver = false;
-        let velocity = new THREE.Vector3();
-        let direction = new THREE.Vector3();
+        let canMove = false, isRightMouseDown = false, isPointerLocked = false;
+        let hasKey = false, gameOver = false, keyObj, doorObj;
+        
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
         const wallSize = 4;
-        const clock = new THREE.Clock();
-        let lastBlackout = 0;
-        let isBlackout = false;
         const walls = [];
+        const flickeringLights = []; // Лампы, которые будут мигать
 
-        // Audio
-        let dangerMusic = null;
-        let monsterSfx = null;
-        let monsterSoundPlayed = false;
-
-        // Monster model animation
-        let mixer = null;
-
-        // Distance thresholds for danger music
-        const DANGER_DIST_MAX = 22;  // начало появления музыки
-        const DANGER_DIST_MIN = 3;   // максимальная громкость (перед контактом)
+        // Аудио (подготовленные вызовы)
+        let soundAmbient, soundScream, soundSteps, soundWin, audioListener;
 
         window.startGame = startGame;
 
         function startGame() {
             document.getElementById('menu').style.display = 'none';
             document.getElementById('hud').style.display = 'block';
-            initAudio();
             init();
             animate();
+            // Попытка зациклить фоновый звук после нажатия кнопки
+            if(soundAmbient) soundAmbient.play();
         }
 
-        function initAudio() {
-            dangerMusic = new Audio('sound/music/danger.mp3');
-            dangerMusic.loop = true;
-            dangerMusic.volume = 0;
-
-            monsterSfx = new Audio('sound/sfx/monster.mp3');
-            monsterSfx.volume = 1;
-        }
-
+        // ==========================================
+        // ИНИЦИАЛИЗАЦИЯ
+        // ==========================================
         function init() {
+            clock = new THREE.Clock();
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x000000);
-            scene.fog = new THREE.FogExp2(0x000000, 0.1);
+            scene.background = new THREE.Color(0x0a0a05); // Очень темный желтоватый оттенок
+            scene.fog = new THREE.FogExp2(0x0a0a05, 0.15); // Густой туман для страха
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            // Аудио Listener
+            audioListener = new THREE.AudioListener();
+            camera.add(audioListener);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.enabled = true; // Тени важны для больницы
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             document.body.appendChild(renderer.domElement);
 
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.2);
-            scene.add(ambientLight);
+            loadAssets(); // Загрузка звуков и текстур
+            buildHospital(); // Постройка лабиринта
+            setupControls(); // Управление
+        }
 
-            const flashLight = new THREE.SpotLight(0xffffff, 10, 30, Math.PI / 4, 0.5, 1);
-            flashLight.castShadow = true;
-            camera.add(flashLight);
-            flashLight.position.set(0, 0, 1);
-            flashLight.target = new THREE.Object3D();
-            camera.add(flashLight.target);
-            flashLight.target.position.set(0, 0, -1);
-            scene.add(camera);
+        // ==========================================
+        // ЗАГРУЗКА РЕСУРСОВ И ЗВУКОВ
+        // ==========================================
+        function loadAssets() {
+            const audioLoader = new THREE.AudioLoader();
 
-            const floorGeo = new THREE.PlaneGeometry(200, 200);
-            const floorMat = new THREE.MeshPhongMaterial({ color: 0xd2b48c });
+            // Фоновый эмбиент (зациклен)
+            soundAmbient = new THREE.Audio(audioListener);
+            audioLoader.load('sounds/hospital_ambient.mp3', (buffer) => {
+                soundAmbient.setBuffer(buffer);
+                soundAmbient.setLoop(true);
+                soundAmbient.setVolume(0.5);
+            });
+
+            // Крик монстра (одинарный)
+            soundScream = new THREE.Audio(audioListener);
+            audioLoader.load('sounds/scream.mp3', (buffer) => {
+                soundScream.setBuffer(buffer);
+                soundScream.setVolume(1);
+            });
+        }
+
+        // ==========================================
+        // ПОСТРОЙКА БОЛЬНИЦЫ
+        // ==========================================
+        function buildHospital() {
+            const textureLoader = new THREE.TextureLoader();
+
+            // Текстуры (замени на свои пути к файлам)
+            const wallTex = textureLoader.load('textures/hospital_wall.jpg'); // Обшарпанные стены
+            const floorTex = textureLoader.load('textures/marble_floor.jpg'); // Белый мрамор
+            const ceilTex = textureLoader.load('textures/hospital_ceil.jpg'); // Потолочные плитки
+            const bloodArrowTex = textureLoader.load('textures/blood_arrow.png'); // Кровавая стрелка (прозрачная)
+
+            // Настройка повторения текстур пола
+            floorTex.wrapS = THREE.RepeatWrapping; floorTex.wrapT = THREE.RepeatWrapping;
+            floorTex.repeat.set(mazeData[0].length, mazeData.length);
+
+            // Пол (мраморная плитка)
+            const floorGeo = new THREE.PlaneGeometry(100, 100);
+            const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.7, metalness: 0.1 });
             const floor = new THREE.Mesh(floorGeo, floorMat);
             floor.rotation.x = -Math.PI / 2;
             floor.receiveShadow = true;
             scene.add(floor);
 
-            const ceilGeo = new THREE.PlaneGeometry(200, 200);
-            const ceilMat = new THREE.MeshPhongMaterial({ color: 0x5d4037 });
+            // Потолок
+            const ceilGeo = new THREE.PlaneGeometry(100, 100);
+            const ceilMat = new THREE.MeshStandardMaterial({ map: ceilTex, roughness: 1 });
             const ceil = new THREE.Mesh(ceilGeo, ceilMat);
             ceil.rotation.x = Math.PI / 2;
             ceil.position.y = wallSize;
             scene.add(ceil);
 
+            // Стены
             const wallGeo = new THREE.BoxGeometry(wallSize, wallSize, wallSize);
-            const wallMat = new THREE.MeshPhongMaterial({ color: 0x808080 });
+            const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 1 });
+
+            let lightCount = 0;
+            let arrowCount = 0;
 
             for (let z = 0; z < mazeData.length; z++) {
                 for (let x = 0; x < mazeData[z].length; x++) {
-                    let posX = (x - mazeData[z].length / 2) * wallSize;
-                    let posZ = (z - mazeData.length / 2) * wallSize;
+                    const posX = (x - mazeData[z].length / 2) * wallSize;
+                    const posZ = (z - mazeData.length / 2) * wallSize;
 
                     if (mazeData[z][x] === 1) {
                         const wall = new THREE.Mesh(wallGeo, wallMat);
@@ -163,282 +200,211 @@
                         wall.receiveShadow = true;
                         scene.add(wall);
                         walls.push(wall);
-                    } else if (mazeData[z][x] === 4) {
-                        camera.position.set(posX, 1.6, posZ);
-                    } else if (mazeData[z][x] === 3) {
-                        createMonster(posX, posZ);
-                    } else if (mazeData[z][x] === 2) {
-                        createKey(posX, posZ);
+                    } else {
+                        // Каждая клетка пола потенциально имеет свет
+                        // Создаем освещение на потолке
+                        if ((x + z) % 3 === 0) { // Размещаем лампы реже
+                            createCeilingLight(posX, posZ, lightCount);
+                            lightCount++;
+                        }
+
+                        // Размещение кровавых стрелок (всего 7 штук рандомно на стенах)
+                        if (mazeData[z][x] === 0 && arrowCount < 7 && Math.random() < 0.05) {
+                            if(addBloodArrow(posX, posZ, bloodArrowTex)) {
+                                arrowCount++;
+                            }
+                        }
+
+                        // Объекты
+                        if (mazeData[z][x] === 4) { camera.position.set(posX, 1.6, posZ); } // Старт
+                        else if (mazeData[z][x] === 2) { createKey(posX, posZ); } // Ключ
+                        else if (mazeData[z][x] === 3) { createMonster(posX, posZ); } // Монстр
+                        else if (mazeData[z][x] === 5) { createDoor(posX, posZ); } // Дверь
                     }
                 }
             }
+        }
 
-            createDoor();
+        function createCeilingLight(x, z, count) {
+            // Модель лампы (простой прямоугольник на потолке)
+            const lampGeo = new THREE.BoxGeometry(1.5, 0.1, 0.5);
+            const lampMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffcc, emissiveIntensity: 1 });
+            const lamp = new THREE.Mesh(lampGeo, lampMat);
+            lamp.position.set(x, wallSize - 0.05, z);
+            scene.add(lamp);
 
-            document.addEventListener('keydown', onKeyDown);
-            document.addEventListener('keyup', onKeyUp);
-            document.addEventListener('mousedown', (e) => { if (e.button === 2) isRightMouseDown = true; });
-            document.addEventListener('mouseup', (e) => { if (e.button === 2) isRightMouseDown = false; });
-            document.addEventListener('contextmenu', e => e.preventDefault());
-            document.addEventListener('mousemove', onMouseMove);
-            window.addEventListener('resize', onWindowResize);
+            // Источник света (желтый PointLight)
+            const light = new THREE.PointLight(0xfffaaa, 6, 12, 1.5); // Цвет, Сила, Дистанция, Спад
+            light.position.set(x, wallSize - 0.5, z);
+            light.castShadow = true; 
+            light.shadow.bias = -0.005; // Уменьшает артефакты теней
+            scene.add(light);
 
-            canMove = true;
-            lastBlackout = Date.now();
+            // Каждая 12-я лампа мигает
+            if (count > 0 && count % 12 === 0) {
+                flickeringLights.push({ light, lamp });
+            }
+        }
+
+        function addBloodArrow(x, z, texture) {
+            // Находим ближайшую стену, чтобы повесить стрелку
+            let attachWall = null;
+            let rotation = 0;
+            const dist = wallSize / 2 + 0.01;
+
+            // Проверяем 4 направления
+            if (isWall(x + wallSize, z)) { attachWall = {x: x+dist, z: z}; rotation = -Math.PI/2; }
+            else if (isWall(x - wallSize, z)) { attachWall = {x: x-dist, z: z}; rotation = Math.PI/2; }
+            else if (isWall(x, z + wallSize)) { attachWall = {x: x, z: z+dist}; rotation = Math.PI; }
+            else if (isWall(x, z - wallSize)) { attachWall = {x: x, z: z-dist}; rotation = 0; }
+
+            if (!attachWall) return false;
+
+            const arrowGeo = new THREE.PlaneGeometry(1, 1);
+            const arrowMat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.8, depthWrite: false });
+            const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+            
+            arrow.position.set(attachWall.x, 1.5 + (Math.random()-0.5), attachWall.z);
+            arrow.rotation.y = rotation;
+            scene.add(arrow);
+            return true;
+        }
+
+        function isWall(x, z) {
+            // Вспомогательная функция для проверки коллизий
+            const gridX = Math.floor(x / wallSize + mazeData[0].length / 2);
+            const gridZ = Math.floor(z / wallSize + mazeData.length / 2);
+            if (gridZ >= 0 && gridZ < mazeData.length && gridX >= 0 && gridX < mazeData[0].length) {
+                return mazeData[gridZ][gridX] === 1;
+            }
+            return true;
+        }
+
+        // ==========================================
+        // КЛЮЧ, ДВЕРЬ И МОНСТР
+        // ==========================================
+        function createKey(x, z) {
+            const geo = new THREE.TorusGeometry(0.1, 0.02, 8, 16);
+            const mat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 1 });
+            keyObj = new THREE.Mesh(geo, mat);
+            keyObj.position.set(x, 1, z);
+            scene.add(keyObj);
+        }
+
+        function createDoor(x, z) {
+            const geo = new THREE.BoxGeometry(wallSize, wallSize, 0.5);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x330000, roughness: 1 });
+            doorObj = new THREE.Mesh(geo, mat);
+            doorObj.position.set(x, wallSize / 2, z);
+            scene.add(doorObj);
         }
 
         function createMonster(x, z) {
-            // Создаём группу-контейнер сразу, чтобы движение работало ещё до загрузки модели
-            monster = new THREE.Group();
-            monster.position.set(x, 0, z);
-            scene.add(monster);
-
             const loader = new GLTFLoader();
-            loader.load(
-                'models/demon_imp.glb',
-                (gltf) => {
-                    const model = gltf.scene;
-                    model.traverse(child => {
-                        if (child.isMesh) {
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-                        }
-                    });
-                    model.scale.setScalar(0.03125);
-                    monster.add(model);
+            // ПУТЬ К ТВОЕМУ МОНСТРУ
+            loader.load('models/monster.glb', (gltf) => {
+                monster = gltf.scene;
+                monster.position.set(x, 0, z);
+                monster.scale.setScalar(1); // Настрой масштаб под больницу
+                monster.traverse(o => { if (o.isMesh) o.castShadow = true; });
+                scene.add(monster);
 
-                    // Запускаем первую анимацию, если есть
-                    if (gltf.animations && gltf.animations.length > 0) {
-                        mixer = new THREE.AnimationMixer(model);
-                        const action = mixer.clipAction(gltf.animations[0]);
-                        action.play();
-                    }
-                },
-                undefined,
-                (err) => {
-                    console.warn('Не удалось загрузить demon_imp.glb, используется запасная модель.', err);
-                    // Запасная процедурная модель
-                    const body = new THREE.Mesh(
-                        new THREE.SphereGeometry(0.5),
-                        new THREE.MeshPhongMaterial({ color: 0x111111 })
-                    );
-                    body.position.y = 0.5;
-                    monster.add(body);
-                    for (let i = 0; i < 8; i++) {
-                        const leg = new THREE.Mesh(
-                            new THREE.CylinderGeometry(0.05, 0.05, 2),
-                            new THREE.MeshPhongMaterial({ color: 0x000000 })
-                        );
-                        leg.rotation.z = Math.PI / 3;
-                        leg.rotation.y = (i * Math.PI / 4);
-                        monster.add(leg);
-                    }
+                if (gltf.animations.length > 0) {
+                    mixer = new THREE.AnimationMixer(monster);
+                    mixer.clipAction(gltf.animations[0]).play(); // Анимация ходьбы/покоя
                 }
-            );
+            }, undefined, (e) => {
+                console.warn("Монстр не загружен. Путь 'models/monster.glb' неверен.", e);
+                // Заглушка, если файла нет
+                const geo = new THREE.CapsuleGeometry(0.5, 1.5);
+                const mat = new THREE.MeshBasicMaterial({color: 0xff0000});
+                monster = new THREE.Mesh(geo, mat);
+                monster.position.set(x, 1, z);
+                scene.add(monster);
+            });
         }
 
-        function createKey(x, z) {
-            const keyGeo = new THREE.BoxGeometry(0.2, 0.5, 0.1);
-            const keyMat = new THREE.MeshPhongMaterial({ color: 0x000000 });
-            key = new THREE.Mesh(keyGeo, keyMat);
-
-            const chainGeo = new THREE.CylinderGeometry(0.01, 0.01, 1);
-            const chainMat = new THREE.MeshPhongMaterial({ color: 0xffd700 });
-            chain = new THREE.Mesh(chainGeo, chainMat);
-
-            key.position.set(x, 2, z);
-            chain.position.set(x, 2.5, z);
-            scene.add(key);
-            scene.add(chain);
+        // ==========================================
+        // УПРАВЛЕНИЕ (PointerLock и физика скольжения)
+        // ==========================================
+        function setupControls() {
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('mousedown', () => {
+                if(!isPointerLocked) {
+                    renderer.domElement.requestPointerLock();
+                }
+            });
+            document.addEventListener('pointerlockchange', () => {
+                isPointerLocked = (document.pointerLockElement === renderer.domElement);
+                canMove = isPointerLocked;
+            });
+            document.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('resize', onWindowResize);
         }
 
-        function createDoor() {
-            const doorGeo = new THREE.BoxGeometry(wallSize, wallSize, 0.5);
-            const doorMat = new THREE.MeshPhongMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 2 });
-            door = new THREE.Mesh(doorGeo, doorMat);
-            door.position.set((25 - mazeData[0].length / 2) * wallSize, wallSize / 2, (1 - mazeData.length / 2) * wallSize);
-            scene.add(door);
-
-            const doorLight = new THREE.PointLight(0x00ff00, 5, 10);
-            doorLight.position.copy(door.position);
-            scene.add(doorLight);
-        }
-
-        function onKeyDown(event) {
-            switch (event.code) {
+        function onKeyDown(e) {
+            switch (e.code) {
                 case 'KeyW': moveForward = true; break;
                 case 'KeyA': moveLeft = true; break;
                 case 'KeyS': moveBackward = true; break;
                 case 'KeyD': moveRight = true; break;
-                case 'KeyE': checkKeyPickup(); break;
+                case 'KeyE': interact(); break;
             }
         }
-
-        function onKeyUp(event) {
-            switch (event.code) {
+        function onKeyUp(e) {
+            switch (e.code) {
                 case 'KeyW': moveForward = false; break;
                 case 'KeyA': moveLeft = false; break;
                 case 'KeyS': moveBackward = false; break;
                 case 'KeyD': moveRight = false; break;
             }
         }
-
-        function onMouseMove(event) {
-            if (isRightMouseDown && canMove) {
-                camera.rotation.y -= event.movementX * 0.002;
+        function onMouseMove(e) {
+            if (isPointerLocked) {
+                camera.rotation.y -= e.movementX * 0.002;
             }
         }
 
-        function checkKeyPickup() {
-            if (!key) return;
-            const dist = camera.position.distanceTo(key.position);
-            if (dist < 3) {
+        function interact() {
+            // Подбор ключа
+            if (keyObj && camera.position.distanceTo(keyObj.position) < 2) {
                 hasKey = true;
-                scene.remove(key);
-                scene.remove(chain);
+                scene.remove(keyObj);
+                keyObj = null;
                 document.getElementById('hasKey').innerText = "ЕСТЬ";
-                document.getElementById('hasKey').style.color = "#0f0";
-                document.getElementById('msg').style.display = 'none';
+                document.getElementById('hasKey').style.color = "#00ff00";
+                showMsg("Вы нашли старый ржавый ключ...");
             }
-        }
-
-        function updateDangerMusic() {
-            if (!monster || !dangerMusic || gameOver) return;
-
-            const dist = monster.position.distanceTo(camera.position);
-
-            let targetVolume = 0;
-            if (dist < DANGER_DIST_MAX) {
-                // Линейно от 0 (на дальней границе) до 1 (на ближней границе)
-                targetVolume = 1 - Math.min(1, Math.max(0,
-                    (dist - DANGER_DIST_MIN) / (DANGER_DIST_MAX - DANGER_DIST_MIN)
-                ));
-            }
-
-            if (targetVolume > 0) {
-                if (dangerMusic.paused) {
-                    dangerMusic.play().catch(() => {});
-                }
-                dangerMusic.volume = targetVolume;
-            } else {
-                if (!dangerMusic.paused) {
-                    dangerMusic.volume = 0;
-                    dangerMusic.pause();
+            // Открытие двери
+            if (doorObj && camera.position.distanceTo(doorObj.position) < 3) {
+                if(hasKey) {
+                    showMsg("Выход открыт! Бегите!");
+                    scene.remove(doorObj);
+                    doorObj = null;
+                    // Звук победы
+                } else {
+                    showMsg("Дверь заперта. Нужен ключ.");
                 }
             }
         }
 
-        function monsterCollidesWall(pos) {
-            const testPoint = new THREE.Vector3(pos.x, wallSize / 2, pos.z);
-            for (const wall of walls) {
-                if (new THREE.Box3().setFromObject(wall).expandByScalar(-0.3).containsPoint(testPoint)) {
-                    return true;
-                }
-            }
-            return false;
+        function showMsg(text) {
+            const el = document.getElementById('msg');
+            el.innerText = text; el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 3000);
         }
 
-        function updateMonster(delta) {
-            if (!monster || gameOver) return;
-
-            const targetPos = camera.position.clone();
-            targetPos.y = 0;
-            const dir = new THREE.Vector3().subVectors(targetPos, monster.position).normalize();
-            const step = dir.multiplyScalar(0.03);
-
-            const oldPos = monster.position.clone();
-            const newPos = oldPos.clone().add(step);
-
-            // Пробуем полное движение
-            if (!monsterCollidesWall(newPos)) {
-                monster.position.copy(newPos);
-            } else {
-                // Скольжение по X
-                const newPosX = new THREE.Vector3(newPos.x, 0, oldPos.z);
-                // Скольжение по Z
-                const newPosZ = new THREE.Vector3(oldPos.x, 0, newPos.z);
-
-                if (!monsterCollidesWall(newPosX)) {
-                    monster.position.copy(newPosX);
-                } else if (!monsterCollidesWall(newPosZ)) {
-                    monster.position.copy(newPosZ);
-                }
-                // иначе — монстр упирается в угол, не двигается
-            }
-
-            monster.position.y = 0;
-            monster.lookAt(targetPos);
-
-            // Обновляем анимацию модели
-            if (mixer) mixer.update(delta);
-
-            // Контакт с игроком — сравниваем только горизонтальное расстояние (XZ)
-            const dx = monster.position.x - camera.position.x;
-            const dz = monster.position.z - camera.position.z;
-            if (Math.sqrt(dx * dx + dz * dz) < 1.5) {
-                die();
-            }
-        }
-
-        function die() {
-            gameOver = true;
-
-            // Останавливаем музыку опасности
-            if (dangerMusic) {
-                dangerMusic.pause();
-                dangerMusic.volume = 0;
-            }
-
-            // Воспроизводим звук монстра
-            if (monsterSfx && !monsterSoundPlayed) {
-                monsterSoundPlayed = true;
-                monsterSfx.currentTime = 0;
-                monsterSfx.play().catch(() => {});
-            }
-
-            setTimeout(() => {
-                alert("МОНСТР ПОЙМАЛ ВАС!");
-                location.reload();
-            }, 600);
-        }
-
-        function win() {
-            gameOver = true;
-            if (dangerMusic) {
-                dangerMusic.pause();
-                dangerMusic.volume = 0;
-            }
-            alert("ВЫ СБЕЖАЛИ ИЗ ЛАБИРИНТА!");
-            location.reload();
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
+        // ==========================================
+        // ИГРОВОЙ ЦИКЛ И ЛОГИКА
+        // ==========================================
         function animate() {
             if (gameOver) return;
             requestAnimationFrame(animate);
 
             const delta = clock.getDelta();
-            const now = Date.now();
 
-            if (now - lastBlackout > 60000) {
-                isBlackout = true;
-                if (now - lastBlackout > 63000) {
-                    isBlackout = false;
-                    lastBlackout = now;
-                }
-            }
-
-            scene.children.forEach(c => {
-                if (c instanceof THREE.SpotLight || c instanceof THREE.PointLight || c instanceof THREE.AmbientLight) {
-                    c.visible = !isBlackout;
-                }
-            });
-
+            // 1. Физика движения и скольжения
             if (canMove) {
                 velocity.x -= velocity.x * 10.0 * delta;
                 velocity.z -= velocity.z * 10.0 * delta;
@@ -447,36 +413,116 @@
                 direction.x = Number(moveRight) - Number(moveLeft);
                 direction.normalize();
 
-                if (moveForward || moveBackward) velocity.z -= direction.z * 100.0 * delta;
-                if (moveLeft || moveRight) velocity.x -= direction.x * 100.0 * delta;
+                const speed = 50.0;
+                if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
 
                 const oldPos = camera.position.clone();
+                
+                // Пробуем движение по X
                 camera.translateX(-velocity.x * delta);
-                camera.translateZ(velocity.z * delta);
-                camera.position.y = 1.6;
+                if (checkCollision()) camera.position.x = oldPos.x; // Отмена X
 
-                for (let wall of walls) {
-                    if (new THREE.Box3().setFromObject(wall).expandByScalar(0.5).containsPoint(camera.position)) {
-                        camera.position.copy(oldPos);
+                // Пробуем движение по Z
+                camera.translateZ(velocity.z * delta);
+                if (checkCollision()) camera.position.z = oldPos.z; // Отмена Z
+                
+                camera.position.y = 1.6; // Фиксация высоты
+            }
+
+            // 2. Логика монстра (ИСПРАВЛЕНА)
+            if (monster && !gameOver) {
+                if (mixer) mixer.update(delta);
+                
+                const dist = monster.position.distanceTo(camera.position);
+                
+                // Если игрок близко, монстр идет к нему
+                if (dist < 20) {
+                    const target = camera.position.clone(); target.y = 0;
+                    monster.lookAt(target);
+                    monster.translateZ(3 * delta); // Скорость монстра
+
+                    // Простая коллизия монстра со стенами (чтобы не проходил насквозь)
+                    const mGridX = Math.floor(monster.position.x / wallSize + mazeData[0].length / 2);
+                    const mGridZ = Math.floor(monster.position.z / wallSize + mazeData.length / 2);
+                    if (mazeData[mGridZ][mGridX] === 1) {
+                         monster.translateZ(-3 * delta); // Откат назад при упоре
+                    }
+
+                    // Скример при поимке
+                    if (dist < 1.5) triggerGameOver();
+                }
+            }
+
+            // 3. Мигание ламп (рандомное)
+            flickeringLights.forEach(item => {
+                if (Math.random() < 0.02) { // Шанс мигнуть в кадре
+                    const isOn = item.light.intensity > 0;
+                    item.light.intensity = isOn ? 0 : 6;
+                    item.lamp.material.emissiveIntensity = isOn ? 0 : 1;
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        function checkCollision() {
+            // Круговая коллизия вокруг игрока
+            const playerPos = camera.position;
+            const playerRadius = 0.7;
+
+            const gridX = Math.floor(playerPos.x / wallSize + mazeData[0].length / 2);
+            const gridZ = Math.floor(playerPos.z / wallSize + mazeData.length / 2);
+
+            // Проверяем 9 клеток вокруг
+            for (let z = gridZ - 1; z <= gridZ + 1; z++) {
+                for (let x = gridX - 1; x <= gridX + 1; x++) {
+                    if (z >= 0 && z < mazeData.length && x >= 0 && x < mazeData[0].length) {
+                        if (mazeData[z][x] === 1) {
+                            const wallX = (x - mazeData[0].length / 2) * wallSize;
+                            const wallZ = (z - mazeData.length / 2) * wallSize;
+                            
+                            // Расстояние от центра камеры до центра стены
+                            const dx = Math.abs(playerPos.x - wallX);
+                            const dz = Math.abs(playerPos.z - wallZ);
+
+                            // Если камера заходит за границы "безопасного радиуса" стены
+                            if (dx < (wallSize/2 + playerRadius/2) && dz < (wallSize/2 + playerRadius/2)) {
+                                return true;
+                            }
+                        }
                     }
                 }
             }
+            return false;
+        }
 
-            if (key) {
-                if (camera.position.distanceTo(key.position) < 3 && !hasKey) {
-                    document.getElementById('msg').style.display = 'block';
-                } else {
-                    document.getElementById('msg').style.display = 'none';
+        function triggerGameOver() {
+            gameOver = true;
+            canMove = false;
+            if(soundAmbient) soundAmbient.stop();
+            if(soundScream) soundScream.play(); // Скример!
+
+            // Эффект смерти (падение камеры)
+            let fallSpeed = 0;
+            const interval = setInterval(() => {
+                fallSpeed += 0.01;
+                camera.position.y -= fallSpeed;
+                camera.rotation.z += 0.02;
+                if (camera.position.y < 0.3) {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        alert("СМЕНА ОКОНЧЕНА. ВАС НАШЛИ.");
+                        location.reload();
+                    }, 1000);
                 }
-            }
+            }, 30);
+        }
 
-            if (hasKey && camera.position.distanceTo(door.position) < 3) {
-                win();
-            }
-
-            updateMonster(delta);
-            updateDangerMusic();
-            renderer.render(scene, camera);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         }
     </script>
 </body>
